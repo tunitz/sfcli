@@ -3,8 +3,8 @@ import Fuse from 'fuse.js'
 import {
   Activity, ArrowDown, ArrowRight, ArrowUpRight, Check, ChevronDown,
   ChevronRight, ChevronsUpDown, CircleHelp, Copy, ExternalLink,
-  Filter, History, Keyboard, Menu, Moon, Search, ShieldCheck,
-  Sparkles, Star, Sun, Terminal, X, Zap,
+  Filter, Keyboard, Menu, Moon, Search, ShieldCheck,
+  Star, Sun, Terminal, X, Zap,
 } from 'lucide-react'
 import rawCommands from './data/commands.json'
 import { categories, categoryOf, workflows } from './data/categories'
@@ -63,16 +63,15 @@ function App() {
   const [mobileNav, setMobileNav] = useState(false)
   const [dark, setDark] = useState(() => readLocal('sfcli:dark', false))
   const [sort, setSort] = useState<'relevance' | 'name'>('relevance')
-  const [recent, setRecent] = useState<string[]>(() => readLocal('sfcli:recent', []))
-  const [showHelp, setShowHelp] = useState(false)
+  const [openSections, setOpenSections] = useState({ workspace: true, categories: true })
   const [expanded, setExpanded] = useState<string[]>([])
   const [openExamples, setOpenExamples] = useState<string[]>([])
   const [openDesc, setOpenDesc] = useState<string[]>([])
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readLocal('sfcli:searches', []))
+  const [showHelp, setShowHelp] = useState(false)
 
   useEffect(() => { localStorage.setItem('sfcli:favorites', JSON.stringify(favorites)) }, [favorites])
   useEffect(() => { localStorage.setItem('sfcli:dark', JSON.stringify(dark)); document.documentElement.dataset.theme = dark ? 'dark' : 'light' }, [dark])
-  useEffect(() => { localStorage.setItem('sfcli:recent', JSON.stringify(recent)) }, [recent])
   useEffect(() => { localStorage.setItem('sfcli:searches', JSON.stringify(recentSearches)) }, [recentSearches])
 
   const results = useMemo(() => {
@@ -87,9 +86,9 @@ function App() {
   function toggleFavorite(id: string) { setFavorites(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   function toggleExpanded(id: string) { setExpanded(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   function toggleExamples(id: string) { setOpenExamples(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
+  function toggleSection(name: 'workspace' | 'categories') { setOpenSections(v => ({ ...v, [name]: !v[name] })) }
   function toggleDesc(id: string) { setOpenDesc(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   async function copy(text: string, id: string) { try { await navigator.clipboard.writeText(text); setCopied(id); window.setTimeout(() => setCopied(''), 1600) } catch { setCopied('copy-error'); window.setTimeout(() => setCopied(''), 1600) } }
-  function selectCommand(command: string) { setRecent(v => [command, ...v.filter(x => x !== command)].slice(0, 6)) }
   function setSearch(value: string) { setQuery(value); if (value.trim().length > 2) setRecentSearches(v => [value.trim(), ...v.filter(x => x !== value.trim())].slice(0, 5)) }
   function setSection(next: typeof view) { setView(next); setCategory('all'); setMobileNav(false) }
 
@@ -114,24 +113,28 @@ function App() {
 
       <div className="workspace">
         <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
-          <div className="sidebar-head"><span>WORKSPACE</span><ChevronDown size={14}/></div>
-          <div className="nav-list">
+          <button className={`sidebar-head ${openSections.workspace ? '' : 'collapsed'}`} onClick={() => toggleSection('workspace')} aria-expanded={openSections.workspace}><span>WORKSPACE</span><ChevronDown size={14}/></button>
+          {openSections.workspace && <div className="nav-list">
             <button className={`nav-item ${view === 'commands' && category === 'all' ? 'active' : ''}`} onClick={() => {setSection('commands'); setCategory('all')}}><span className="nav-symbol blue"><Terminal size={16}/></span><span>All commands</span><span className="nav-count">{allCommands.length}</span></button>
             <button className={`nav-item ${view === 'favorites' ? 'active' : ''}`} onClick={() => setSection('favorites')}><span className="nav-symbol amber"><Star size={16}/></span><span>Favorites</span><span className="nav-count">{favorites.length}</span></button>
             <button className={`nav-item ${view === 'workflows' ? 'active' : ''}`} onClick={() => setSection('workflows')}><span className="nav-symbol violet"><Zap size={16}/></span><span>Common workflows</span></button>
-          </div>
-          <div className="sidebar-label">CATEGORIES</div>
-          <div className="nav-list category-list">
+          </div>}
+          <button className={`sidebar-head sidebar-head-categories ${openSections.categories ? '' : 'collapsed'}`} onClick={() => toggleSection('categories')} aria-expanded={openSections.categories}><span>CATEGORIES</span><ChevronDown size={14}/></button>
+          {openSections.categories && <div className="nav-list category-list">
             {categories.filter(c => c.id !== 'all' && countByCategory(c.id) > 0).map(c => <button key={c.id} className={`nav-item ${category === c.id && view === 'commands' ? 'active' : ''}`} onClick={() => {setSection('commands'); setCategory(c.id)}}><span className={`category-dot dot-${c.id}`}/><span>{c.label}</span><span className="nav-count">{countByCategory(c.id)}</span></button>)}
-          </div>
-          <div className="sidebar-label recent-label">RECENT</div>
-          <div className="recent-list">{recent.length ? recent.slice(0, 4).map(cmd => <button key={cmd} className="recent-item" onClick={() => {setQuery(cmd.replace(/^sf /, ''));setSection('commands')}}><History size={13}/><code>{cmd}</code></button>) : <p className="recent-empty">Commands you copy show up here.</p>}</div>
-          <div className="sidebar-bottom"><div className="sidebar-promo"><div className="promo-icon"><Sparkles size={15}/></div><strong>Find the right command</strong><p>Search by what you want to do, not just what it’s called.</p><button onClick={() => {document.querySelector<HTMLInputElement>('#command-search')?.focus();setQuery('deploy changes')}}>Try “deploy changes” <ArrowRight size={12}/></button></div><div className="sidebar-foot"><span><span className="green-dot"/> Everything runs locally</span><button onClick={() => setShowHelp(true)} aria-label="Help"><CircleHelp size={15}/></button></div></div>
+          </div>}
+          <div className="sidebar-bottom"><div className="sidebar-foot"><span><span className="green-dot"/> Everything runs locally</span><button onClick={() => setShowHelp(true)} aria-label="Help"><CircleHelp size={15}/></button></div></div>
         </aside>
 
         <main className="main-content">
           <div className="content-inner">
-            <div className="breadcrumb"><span>Salesforce CLI</span><ChevronRight size={13}/><strong>{view === 'workflows' ? 'Workflows' : view === 'favorites' ? 'Favorites' : categoryMeta(category)?.label || 'Commands'}</strong></div>
+            <nav className="breadcrumb" aria-label="Breadcrumb">
+              <button className="crumb-link" onClick={() => {setQuery(''); setCategory('all'); setView('commands')}}>All commands</button>
+              {view === 'favorites' && <><ChevronRight size={13}/><strong aria-current="page">Favorites</strong></>}
+              {view === 'workflows' && <><ChevronRight size={13}/><strong aria-current="page">Common workflows</strong></>}
+              {view === 'commands' && category !== 'all' && <><ChevronRight size={13}/><strong aria-current="page">{categoryMeta(category)?.label}</strong></>}
+              {view === 'commands' && category === 'all' && deferredQuery && <><ChevronRight size={13}/><strong aria-current="page">Search results</strong><button className="crumb-clear" onClick={() => setQuery('')}><X size={12}/> clear</button></>}
+            </nav>
             {view === 'commands' && category === 'all' && !deferredQuery && <section className="hero-section"><div className="hero-copy"><div className="eyebrow"><span className="eyebrow-mark"><Activity size={12}/></span> YOUR SALESFORCE CLI COMPANION</div><h1>Every command.<br/><span>One search away.</span></h1><p>Explore, understand, and copy Salesforce CLI commands. Search by name, flag, or just describe what you’re trying to do.</p><div className="hero-actions"><Button className="hero-button" onClick={() => document.querySelector<HTMLInputElement>('#command-search')?.focus()}><Search size={16}/> Explore commands <ArrowDown size={14}/></Button><button className="hero-secondary" onClick={() => setSection('workflows')}>Browse common workflows <ArrowRight size={14}/></button></div></div><div className="hero-art" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-terminal"><div className="terminal-top"><span className="terminal-lights"><i/><i/><i/></span><span>~/my-salesforce-project</span><span className="terminal-ready"><span/>ready</span></div><div className="terminal-body"><div><span className="terminal-prompt">$</span> sf org login web <span className="terminal-cursor"/></div><div className="terminal-muted">Opening browser for authentication…</div><div className="terminal-success"><Check size={12}/> Successfully authorized <span>my-org</span></div><div className="terminal-line"><span className="terminal-prompt">$</span> sf project deploy start <span className="terminal-cursor faint"/></div></div></div><div className="float-chip chip-top"><span className="chip-icon">✦</span> 273 commands</div><div className="float-chip chip-bottom"><span className="chip-check"><Check size={12}/></span> Copied to clipboard</div><div className="hero-sparkle sparkle-one">✳</div><div className="hero-sparkle sparkle-two">✦</div></div></section>}
 
             <section className="command-browser" id="command-list">
@@ -139,7 +142,7 @@ function App() {
               <div className="search-row"><div className="search-wrap"><Search size={17} className="search-icon"/><Input id="command-search" value={query} onChange={e => setSearch(e.target.value)} onKeyDown={e => {if (e.key === 'Escape') setQuery('')}} placeholder="Try ‘log in to a sandbox’ or ‘deploy my changes’…" className="search-input"/><span className="search-kbd"><kbd>⌘</kbd><kbd>K</kbd></span>{query && <button className="clear-search" onClick={() => setQuery('')} aria-label="Clear search"><X size={15}/></button>}</div><Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" className={`filter-button ${sort === 'name' ? 'filter-active' : ''}`} aria-label="Toggle sort" onClick={() => setSort(sort === 'name' ? 'relevance' : 'name')}><Filter size={16}/></Button></TooltipTrigger><TooltipContent>Sort by {sort === 'name' ? 'relevance' : 'name'}</TooltipContent></Tooltip></div>
               {!query && view === 'commands' && <div className="quick-filters"><span className="quick-label">TRY</span>{['authenticate', 'deploy changes', 'run a query', 'create a project'].map((q,i) => <button className="quick-chip" key={q} onClick={() => setSearch(q)}>{i===0&&<ShieldCheck size={12}/>} {q}</button>)}</div>}
 
-              {view === 'workflows' ? <div className="workflow-grid">{workflows.map(w => <Card key={w.step} className="workflow-card"><div className="workflow-step">{w.step}<span/></div><h3>{w.title}</h3><p>{w.description}</p>{w.commands.map((cmd,i) => <button className="workflow-command" key={i} onClick={() => {void copy(cmd,`workflow-${w.step}-${i}`);selectCommand(cmd)}}><code>{cmd}</code>{copied===`workflow-${w.step}-${i}`?<Check size={15}/>:<Copy size={15}/>}</button>)}<div className="workflow-tags">{w.tags.slice(0,3).map(t=><span key={t}>{t}</span>)}</div></Card>)}</div> : <>
+              {view === 'workflows' ? <div className="workflow-grid">{workflows.map(w => <Card key={w.step} className="workflow-card"><div className="workflow-step">{w.step}<span/></div><h3>{w.title}</h3><p>{w.description}</p>{w.commands.map((cmd,i) => <button className="workflow-command" key={i} onClick={() => {void copy(cmd,`workflow-${w.step}-${i}`)}}><code>{cmd}</code>{copied===`workflow-${w.step}-${i}`?<Check size={15}/>:<Copy size={15}/>}</button>)}<div className="workflow-tags">{w.tags.slice(0,3).map(t=><span key={t}>{t}</span>)}</div></Card>)}</div> : <>
                 {view === 'favorites' && !favorites.length ? <div className="empty-state"><span className="empty-icon"><Star size={23}/></span><h3>Save commands for later</h3><p>Tap the star on any command and it’ll be waiting here next time.</p><Button variant="outline" onClick={() => setSection('commands')}>Browse commands <ArrowRight size={14}/></Button></div> : <>
                   <div className="result-meta"><span>{deferredQuery ? <><strong>{results.length}</strong> matches</> : <>Showing <strong>{results.length}</strong> of <strong>{allCommands.length}</strong> commands</>}</span><button onClick={() => setSort(sort === 'relevance' ? 'name' : 'relevance')} className="sort-control"><ChevronsUpDown size={13}/>{sort === 'relevance' ? 'Best match' : 'Name'}</button></div>
                   <div className="command-list">{results.slice(0, 60).map((c, i) => {
@@ -153,7 +156,7 @@ function App() {
                     const shownExamples = exOpen ? exampleList : exampleList.slice(0, 1)
                     const shown = isOpen ? flagList : flagList.slice(0, 4)
                     return (<Card key={c.id} className="command-card" style={{animationDelay:`${Math.min(i*25,300)}ms`}}><div className="command-card-main">
-                      <div className="command-head"><span className="command-name">sf {c.id.replaceAll(':',' ')}</span><button className={`copy-command ${copied===c.id?'copied':''}`} onClick={() => {void copy(c.command, c.id);selectCommand(c.command)}}>{copied===c.id?<><Check size={14}/> Copied</>:<><Copy size={14}/> Copy</>}</button><Badge variant="outline" className={`category-badge cat-${c.category}`}>{categoryMeta(c.category)?.label || c.category}</Badge><button className={`favorite-button ${favorite?'is-favorite':''}`} onClick={() => toggleFavorite(c.id)} aria-label={favorite?'Remove favorite':'Add favorite'} title={favorite?'Remove favorite':'Add to favorites'}><Star size={17} fill={favorite?'currentColor':'none'}/></button></div>
+                      <div className="command-head"><span className="command-name">sf {c.id.replaceAll(':',' ')}</span><button className={`copy-command ${copied===c.id?'copied':''}`} onClick={() => {void copy(c.command, c.id)}}>{copied===c.id?<><Check size={14}/> Copied</>:<><Copy size={14}/> Copy</>}</button><Badge variant="outline" className={`category-badge cat-${c.category}`}>{categoryMeta(c.category)?.label || c.category}</Badge><button className={`favorite-button ${favorite?'is-favorite':''}`} onClick={() => toggleFavorite(c.id)} aria-label={favorite?'Remove favorite':'Add favorite'} title={favorite?'Remove favorite':'Add to favorites'}><Star size={17} fill={favorite?'currentColor':'none'}/></button></div>
                       <p className="command-summary">{c.summary}</p>
                       <p className={`command-description ${descOpen ? '' : 'clamped'}`}>{c.description}</p>
                       {c.description.length > 120 && <button className="desc-toggle" onClick={() => toggleDesc(c.id)} aria-expanded={descOpen}>{descOpen ? 'Show less' : 'Show full description'}</button>}
@@ -166,7 +169,7 @@ function App() {
                       </div>}
                       {exampleList.length > 0 && <div className="example-block">
                         <span className="example-label">Examples{exampleList.length > 1 ? ` (${exampleList.length})` : ''}</span>
-                        {shownExamples.map((e, idx) => <button key={idx} className="example-row" onClick={() => {void copy(e[0], `${c.id}-ex${idx}`);selectCommand(e[0])}} title="Copy example">
+                        {shownExamples.map((e, idx) => <button key={idx} className="example-row" onClick={() => {void copy(e[0], `${c.id}-ex${idx}`)}} title="Copy example">
                           <code className="example-cmd">{e[0]}</code>
                           {e[1] && <span className="example-desc">{e[1]}</span>}
                           <span className="example-copy">{copied === `${c.id}-ex${idx}` ? <Check size={14}/> : <Copy size={14}/>}</span>
