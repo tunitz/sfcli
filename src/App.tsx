@@ -14,14 +14,13 @@ import { Card } from './components/ui/card'
 import { Input } from './components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/ui/tooltip'
 
-type SfCommand = { id: string; summary: string; description?: string; examples?: string[]; flags?: string[]; args?: string[]; hidden?: boolean }
+type SfCommand = { id: string; summary: string; description?: string; hidden?: boolean; flags?: string[][]; args?: (string | boolean)[][] }
 const allCommands = (rawCommands as unknown as SfCommand[]).filter(c => !c.hidden).map(c => ({
   ...c,
   category: categoryOf(c.id),
   description: (c.description || c.summary || '').replace(/\n+/g, ' ').trim(),
   command: `sf ${c.id.replaceAll(':', ' ')}`,
-  flagsText: (c.flags || []).join(' '),
-  examplesText: (c.examples || []).join(' '),
+  flagsText: (c.flags || []).map(f => f.join(' ')).join(' '),
 }))
 type CommandItem = typeof allCommands[number]
 const knownCategories = categories.map(c => c.id)
@@ -34,10 +33,10 @@ const readLocal = <T,>(key: string, fallback: T): T => { try { const v = localSt
 const fuse = new Fuse(allCommands, {
   keys: [
     { name: 'id', weight: 1.6 }, { name: 'command', weight: 1.4 }, { name: 'summary', weight: 1.4 },
-    { name: 'description', weight: 1 }, { name: 'flagsText', weight: 0.5 }, { name: 'examplesText', weight: 0.6 },
+    { name: 'description', weight: 1 }, { name: 'flagsText', weight: 0.6 },
   ], threshold: 0.34, ignoreLocation: true, includeScore: true, minMatchCharLength: 2,
 })
-const searchText = new Map(allCommands.map(c => [c.id, `${c.id} ${c.command} ${c.summary} ${c.description} ${c.flagsText} ${c.examplesText}`.toLowerCase()]))
+const searchText = new Map(allCommands.map(c => [c.id, `${c.id} ${c.command} ${c.summary} ${c.description} ${c.flagsText}`.toLowerCase()]))
 
 // Rank by intent: every fuzzy hit whose full text contains ALL query terms floats to the top,
 // then the remaining fuzzy matches. Makes "log in to a sandbox" beat unrelated command names.
@@ -65,6 +64,7 @@ function App() {
   const [sort, setSort] = useState<'relevance' | 'name'>('relevance')
   const [recent, setRecent] = useState<string[]>(() => readLocal('sfcli:recent', []))
   const [showHelp, setShowHelp] = useState(false)
+  const [expanded, setExpanded] = useState<string[]>([])
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readLocal('sfcli:searches', []))
 
   useEffect(() => { localStorage.setItem('sfcli:favorites', JSON.stringify(favorites)) }, [favorites])
@@ -82,6 +82,7 @@ function App() {
   }, [deferredQuery, category, view, favorites, sort])
 
   function toggleFavorite(id: string) { setFavorites(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
+  function toggleExpanded(id: string) { setExpanded(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   async function copy(text: string, id: string) { try { await navigator.clipboard.writeText(text); setCopied(id); window.setTimeout(() => setCopied(''), 1600) } catch { setCopied('copy-error'); window.setTimeout(() => setCopied(''), 1600) } }
   function selectCommand(command: string) { setRecent(v => [command, ...v.filter(x => x !== command)].slice(0, 6)) }
   function setSearch(value: string) { setQuery(value); if (value.trim().length > 2) setRecentSearches(v => [value.trim(), ...v.filter(x => x !== value.trim())].slice(0, 5)) }
@@ -138,13 +139,21 @@ function App() {
                   <div className="result-meta"><span>{deferredQuery ? <><strong>{results.length}</strong> matches</> : <>Showing <strong>{results.length}</strong> of <strong>{allCommands.length}</strong> commands</>}</span><button onClick={() => setSort(sort === 'relevance' ? 'name' : 'relevance')} className="sort-control"><ChevronsUpDown size={13}/>{sort === 'relevance' ? 'Best match' : 'Name'}</button></div>
                   <div className="command-list">{results.slice(0, 60).map((c, i) => {
                     const favorite = favorites.includes(c.id)
-                    const flags = (c.flags || []).filter(x => !['json','help','flags-dir'].includes(x)).slice(0,4)
-                    const argNames = c.args || []
+                    const flagList = c.flags || []
+                    const argList = c.args || []
+                    const isOpen = expanded.includes(c.id)
+                    const shown = isOpen ? flagList : flagList.slice(0, 4)
                     return (<Card key={c.id} className="command-card" style={{animationDelay:`${Math.min(i*25,300)}ms`}}><div className="command-card-main">
                       <div className="command-head"><span className="command-name">sf {c.id.replaceAll(':',' ')}</span><button className={`copy-command ${copied===c.id?'copied':''}`} onClick={() => {void copy(c.command, c.id);selectCommand(c.command)}}>{copied===c.id?<><Check size={14}/> Copied</>:<><Copy size={14}/> Copy</>}</button><Badge variant="outline" className={`category-badge cat-${c.category}`}>{categoryMeta(c.category)?.label || c.category}</Badge><button className={`favorite-button ${favorite?'is-favorite':''}`} onClick={() => toggleFavorite(c.id)} aria-label={favorite?'Remove favorite':'Add favorite'} title={favorite?'Remove favorite':'Add to favorites'}><Star size={17} fill={favorite?'currentColor':'none'}/></button></div>
                       <p className="command-summary">{c.summary}</p>
                       <p className="command-description">{c.description.slice(0,260)}{c.description.length>260?'…':''}</p>
-                      {(flags.length>0 || argNames.length>0) && <div className="command-flags">{flags.map(f=><span key={f} className="flag-chip">--{f}</span>)}{argNames.slice(0,2).map(a=><span key={a} className="flag-chip arg-chip">&lt;{a}&gt;</span>)}{(c.flags||[]).length>flags.length && <span className="flag-more">+{(c.flags||[]).length-flags.length} more</span>}</div>}
+                      {(flagList.length > 0 || argList.length > 0) && <div className={`command-flags ${isOpen ? 'flags-open' : ''}`}>
+                        {argList.slice(0, isOpen ? argList.length : 2).map(a => <span key={String(a[0])} className="flag-chip arg-chip" title={String(a[1] || '')}>&lt;{a[0]}&gt;{a[2] ? '*' : ''}</span>)}
+                        {shown.map(f => isOpen
+                          ? <span key={f[0]} className="flag-line"><span className="flag-chip">--{f[0]}</span>{f[1] && <span className="flag-desc">{f[1]}</span>}</span>
+                          : <span key={f[0]} className="flag-chip" title={f[1]}>{'--' + f[0]}</span>)}
+                        {flagList.length > 4 && <button className={`flag-toggle ${isOpen ? 'open' : ''}`} onClick={() => toggleExpanded(c.id)} aria-expanded={isOpen}><ChevronDown size={13}/>{isOpen ? 'Show fewer flags' : `Show all ${flagList.length} flags`}</button>}
+                      </div>}
                     </div></Card>)
                     })}</div>
                   {results.length > 60 && <div className="more-results"><span>Showing first 60 of {results.length} results.</span><button onClick={() => {setSearch('');setCategory('all')}}>Clear filters</button></div>}
