@@ -14,13 +14,14 @@ import { Card } from './components/ui/card'
 import { Input } from './components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/ui/tooltip'
 
-type SfCommand = { id: string; summary: string; description?: string; hidden?: boolean; flags?: string[][]; args?: (string | boolean)[][] }
+type SfCommand = { id: string; summary: string; description?: string; hidden?: boolean; flags?: string[][]; args?: (string | boolean)[][]; examples?: string[][] }
 const allCommands = (rawCommands as unknown as SfCommand[]).filter(c => !c.hidden).map(c => ({
   ...c,
   category: categoryOf(c.id),
   description: (c.description || c.summary || '').replace(/\n+/g, ' ').trim(),
   command: `sf ${c.id.replaceAll(':', ' ')}`,
   flagsText: (c.flags || []).map(f => f.join(' ')).join(' '),
+  examplesText: (c.examples || []).map(e => e.join(' ')).join(' '),
 }))
 type CommandItem = typeof allCommands[number]
 const knownCategories = categories.map(c => c.id)
@@ -33,10 +34,10 @@ const readLocal = <T,>(key: string, fallback: T): T => { try { const v = localSt
 const fuse = new Fuse(allCommands, {
   keys: [
     { name: 'id', weight: 1.6 }, { name: 'command', weight: 1.4 }, { name: 'summary', weight: 1.4 },
-    { name: 'description', weight: 1 }, { name: 'flagsText', weight: 0.6 },
+    { name: 'description', weight: 1 }, { name: 'flagsText', weight: 0.6 }, { name: 'examplesText', weight: 0.8 },
   ], threshold: 0.34, ignoreLocation: true, includeScore: true, minMatchCharLength: 2,
 })
-const searchText = new Map(allCommands.map(c => [c.id, `${c.id} ${c.command} ${c.summary} ${c.description} ${c.flagsText}`.toLowerCase()]))
+const searchText = new Map(allCommands.map(c => [c.id, `${c.id} ${c.command} ${c.summary} ${c.description} ${c.flagsText} ${c.examplesText}`.toLowerCase()]))
 
 // Rank by intent: every fuzzy hit whose full text contains ALL query terms floats to the top,
 // then the remaining fuzzy matches. Makes "log in to a sandbox" beat unrelated command names.
@@ -65,6 +66,7 @@ function App() {
   const [recent, setRecent] = useState<string[]>(() => readLocal('sfcli:recent', []))
   const [showHelp, setShowHelp] = useState(false)
   const [expanded, setExpanded] = useState<string[]>([])
+  const [openExamples, setOpenExamples] = useState<string[]>([])
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readLocal('sfcli:searches', []))
 
   useEffect(() => { localStorage.setItem('sfcli:favorites', JSON.stringify(favorites)) }, [favorites])
@@ -83,6 +85,7 @@ function App() {
 
   function toggleFavorite(id: string) { setFavorites(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   function toggleExpanded(id: string) { setExpanded(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
+  function toggleExamples(id: string) { setOpenExamples(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   async function copy(text: string, id: string) { try { await navigator.clipboard.writeText(text); setCopied(id); window.setTimeout(() => setCopied(''), 1600) } catch { setCopied('copy-error'); window.setTimeout(() => setCopied(''), 1600) } }
   function selectCommand(command: string) { setRecent(v => [command, ...v.filter(x => x !== command)].slice(0, 6)) }
   function setSearch(value: string) { setQuery(value); if (value.trim().length > 2) setRecentSearches(v => [value.trim(), ...v.filter(x => x !== value.trim())].slice(0, 5)) }
@@ -142,6 +145,9 @@ function App() {
                     const flagList = c.flags || []
                     const argList = c.args || []
                     const isOpen = expanded.includes(c.id)
+                    const exampleList = c.examples || []
+                    const exOpen = openExamples.includes(c.id)
+                    const shownExamples = exOpen ? exampleList : exampleList.slice(0, 1)
                     const shown = isOpen ? flagList : flagList.slice(0, 4)
                     return (<Card key={c.id} className="command-card" style={{animationDelay:`${Math.min(i*25,300)}ms`}}><div className="command-card-main">
                       <div className="command-head"><span className="command-name">sf {c.id.replaceAll(':',' ')}</span><button className={`copy-command ${copied===c.id?'copied':''}`} onClick={() => {void copy(c.command, c.id);selectCommand(c.command)}}>{copied===c.id?<><Check size={14}/> Copied</>:<><Copy size={14}/> Copy</>}</button><Badge variant="outline" className={`category-badge cat-${c.category}`}>{categoryMeta(c.category)?.label || c.category}</Badge><button className={`favorite-button ${favorite?'is-favorite':''}`} onClick={() => toggleFavorite(c.id)} aria-label={favorite?'Remove favorite':'Add favorite'} title={favorite?'Remove favorite':'Add to favorites'}><Star size={17} fill={favorite?'currentColor':'none'}/></button></div>
@@ -153,6 +159,15 @@ function App() {
                           ? <span key={f[0]} className="flag-line"><span className="flag-chip">--{f[0]}</span>{f[1] && <span className="flag-desc">{f[1]}</span>}</span>
                           : <span key={f[0]} className="flag-chip" title={f[1]}>{'--' + f[0]}</span>)}
                         {flagList.length > 4 && <button className={`flag-toggle ${isOpen ? 'open' : ''}`} onClick={() => toggleExpanded(c.id)} aria-expanded={isOpen}><ChevronDown size={13}/>{isOpen ? 'Show fewer flags' : `Show all ${flagList.length} flags`}</button>}
+                      </div>}
+                      {exampleList.length > 0 && <div className="example-block">
+                        <span className="example-label">Examples{exampleList.length > 1 ? ` (${exampleList.length})` : ''}</span>
+                        {shownExamples.map((e, idx) => <button key={idx} className="example-row" onClick={() => {void copy(e[0], `${c.id}-ex${idx}`);selectCommand(e[0])}} title="Copy example">
+                          <code className="example-cmd">{e[0]}</code>
+                          {e[1] && <span className="example-desc">{e[1]}</span>}
+                          <span className="example-copy">{copied === `${c.id}-ex${idx}` ? <Check size={14}/> : <Copy size={14}/>}</span>
+                        </button>)}
+                        {exampleList.length > 1 && <button className={`flag-toggle ${exOpen ? 'open' : ''}`} onClick={() => toggleExamples(c.id)} aria-expanded={exOpen}><ChevronDown size={13}/>{exOpen ? 'Show fewer examples' : `Show all ${exampleList.length} examples`}</button>}
                       </div>}
                     </div></Card>)
                     })}</div>
