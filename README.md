@@ -10,7 +10,9 @@ A fast, static command reference for Salesforce CLI (`sf`). Search all commands 
 - Every example the CLI ships for a command (up to 16), copyable in one click — one shows by default.
 - Full help text for every command: descriptions clamp to two lines with a "Show full description" toggle
   (up to 2,500 characters), flags and examples expand the same way.
-- Favorites, recent searches and theme preference stored in this browser only.
+- Favorites lead every list — they float to the top of the category, search or all-commands view
+  they belong to (and never appear in categories they don't belong to); recent searches and theme
+  preference are stored in this browser only.
 - Curated workflows for authenticating, checking an org, creating a project, deploying metadata, querying records, and opening an org.
 - Collapsible sidebar (whole panel plus workspace/CATEGORIES sections) and clickable breadcrumbs for
   moving between views; the sidebar state persists in this browser.

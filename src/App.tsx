@@ -89,6 +89,11 @@ function App() {
     if (category !== 'all' && view === 'commands') found = found.filter(c => matchesCategory(c, category))
     if (view === 'workflows') found = []
     if (sort === 'name') found = [...found].sort((a, b) => a.id.localeCompare(b.id))
+    // Favorites always lead the list, whatever the filter, keeping their relative order otherwise.
+    if (favorites.length) {
+      const favs = found.filter(c => favorites.includes(c.id))
+      if (favs.length && favs.length < found.length) found = [...favs, ...found.filter(c => !favorites.includes(c.id))]
+    }
     return found
   }, [deferredQuery, category, view, favorites, sort])
 
