@@ -75,6 +75,13 @@ function App() {
   useEffect(() => { localStorage.setItem('sfcli:dark', JSON.stringify(dark)); document.documentElement.dataset.theme = dark ? 'dark' : 'light' }, [dark])
   useEffect(() => { localStorage.setItem('sfcli:searches', JSON.stringify(recentSearches)) }, [recentSearches])
   useEffect(() => { localStorage.setItem('sfcli:sidebar', JSON.stringify(sidebarOpen)) }, [sidebarOpen])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); focusSearch() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const results = useMemo(() => {
     let found: CommandItem[] = deferredQuery.trim() ? rankByIntent(deferredQuery.trim()) : category === 'all' && view === 'commands' ? popular : allCommands
@@ -88,6 +95,12 @@ function App() {
   function toggleFavorite(id: string) { setFavorites(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   function toggleExpanded(id: string) { setExpanded(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   function toggleExamples(id: string) { setOpenExamples(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
+  function focusSearch() {
+    const el = document.querySelector<HTMLInputElement>('#command-search')
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.focus({ preventScroll: true })
+  }
   function toggleSection(name: 'workspace' | 'categories') { setOpenSections(v => ({ ...v, [name]: !v[name] })) }
   function toggleDesc(id: string) { setOpenDesc(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   async function copy(text: string, id: string) { try { await navigator.clipboard.writeText(text); setCopied(id); window.setTimeout(() => setCopied(''), 1600) } catch { setCopied('copy-error'); window.setTimeout(() => setCopied(''), 1600) } }
@@ -138,7 +151,7 @@ function App() {
               {view === 'commands' && category !== 'all' && <><ChevronRight size={13}/><strong aria-current="page">{categoryMeta(category)?.label}</strong></>}
               {view === 'commands' && category === 'all' && deferredQuery && <><ChevronRight size={13}/><strong aria-current="page">Search results</strong><button className="crumb-clear" onClick={() => setQuery('')}><X size={12}/> clear</button></>}
             </nav>
-            {view === 'commands' && category === 'all' && !deferredQuery && <section className="hero-section"><div className="hero-copy"><div className="eyebrow"><span className="eyebrow-mark"><Activity size={12}/></span> YOUR SALESFORCE CLI COMPANION</div><h1>Every command.<br/><span>One search away.</span></h1><p>Explore, understand, and copy Salesforce CLI commands. Search by name, flag, or just describe what you’re trying to do.</p><div className="hero-actions"><Button className="hero-button" onClick={() => document.querySelector<HTMLInputElement>('#command-search')?.focus()}><Search size={16}/> Explore commands <ArrowDown size={14}/></Button><button className="hero-secondary" onClick={() => setSection('workflows')}>Browse common workflows <ArrowRight size={14}/></button></div></div><div className="hero-art" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-terminal"><div className="terminal-top"><span className="terminal-lights"><i/><i/><i/></span><span>~/my-salesforce-project</span><span className="terminal-ready"><span/>ready</span></div><div className="terminal-body"><div><span className="terminal-prompt">$</span> sf org login web <span className="terminal-cursor"/></div><div className="terminal-muted">Opening browser for authentication…</div><div className="terminal-success"><Check size={12}/> Successfully authorized <span>my-org</span></div><div className="terminal-line"><span className="terminal-prompt">$</span> sf project deploy start <span className="terminal-cursor faint"/></div></div></div><div className="float-chip chip-top"><span className="chip-icon">✦</span> 273 commands</div><div className="float-chip chip-bottom"><span className="chip-check"><Check size={12}/></span> Copied to clipboard</div><div className="hero-sparkle sparkle-one">✳</div><div className="hero-sparkle sparkle-two">✦</div></div></section>}
+            {view === 'commands' && category === 'all' && !deferredQuery && <section className="hero-section"><div className="hero-copy"><div className="eyebrow"><span className="eyebrow-mark"><Activity size={12}/></span> YOUR SALESFORCE CLI COMPANION</div><h1>Every command.<br/><span>One search away.</span></h1><p>Explore, understand, and copy Salesforce CLI commands. Search by name, flag, or just describe what you’re trying to do.</p><div className="hero-actions"><Button className="hero-button" onClick={focusSearch}><Search size={16}/> Explore commands <ArrowDown size={14}/></Button><button className="hero-secondary" onClick={() => setSection('workflows')}>Browse common workflows <ArrowRight size={14}/></button></div></div><div className="hero-art" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-terminal"><div className="terminal-top"><span className="terminal-lights"><i/><i/><i/></span><span>~/my-salesforce-project</span><span className="terminal-ready"><span/>ready</span></div><div className="terminal-body"><div><span className="terminal-prompt">$</span> sf org login web <span className="terminal-cursor"/></div><div className="terminal-muted">Opening browser for authentication…</div><div className="terminal-success"><Check size={12}/> Successfully authorized <span>my-org</span></div><div className="terminal-line"><span className="terminal-prompt">$</span> sf project deploy start <span className="terminal-cursor faint"/></div></div></div><div className="float-chip chip-top"><span className="chip-icon">✦</span> 273 commands</div><div className="float-chip chip-bottom"><span className="chip-check"><Check size={12}/></span> Copied to clipboard</div><div className="hero-sparkle sparkle-one">✳</div><div className="hero-sparkle sparkle-two">✦</div></div></section>}
 
             <section className="command-browser" id="command-list">
               <div className="section-heading"><div><div className="heading-title-row"><h2>{title}</h2>{!deferredQuery && view === 'commands' && category === 'all' && <Badge variant="secondary" className="heading-badge">HAND-PICKED</Badge>}{deferredQuery && <Badge variant="secondary" className="heading-badge">FUZZY SEARCH</Badge>}</div><p>{subtitle}</p></div><a className="docs-link" href="https://developer.salesforce.com/docs/platform/salesforce-cli" target="_blank" rel="noreferrer">CLI documentation <ExternalLink size={13}/></a></div>
