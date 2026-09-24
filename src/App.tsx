@@ -67,6 +67,7 @@ function App() {
   const [showHelp, setShowHelp] = useState(false)
   const [expanded, setExpanded] = useState<string[]>([])
   const [openExamples, setOpenExamples] = useState<string[]>([])
+  const [openDesc, setOpenDesc] = useState<string[]>([])
   const [recentSearches, setRecentSearches] = useState<string[]>(() => readLocal('sfcli:searches', []))
 
   useEffect(() => { localStorage.setItem('sfcli:favorites', JSON.stringify(favorites)) }, [favorites])
@@ -86,6 +87,7 @@ function App() {
   function toggleFavorite(id: string) { setFavorites(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   function toggleExpanded(id: string) { setExpanded(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   function toggleExamples(id: string) { setOpenExamples(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
+  function toggleDesc(id: string) { setOpenDesc(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   async function copy(text: string, id: string) { try { await navigator.clipboard.writeText(text); setCopied(id); window.setTimeout(() => setCopied(''), 1600) } catch { setCopied('copy-error'); window.setTimeout(() => setCopied(''), 1600) } }
   function selectCommand(command: string) { setRecent(v => [command, ...v.filter(x => x !== command)].slice(0, 6)) }
   function setSearch(value: string) { setQuery(value); if (value.trim().length > 2) setRecentSearches(v => [value.trim(), ...v.filter(x => x !== value.trim())].slice(0, 5)) }
@@ -147,12 +149,14 @@ function App() {
                     const isOpen = expanded.includes(c.id)
                     const exampleList = c.examples || []
                     const exOpen = openExamples.includes(c.id)
+                    const descOpen = openDesc.includes(c.id)
                     const shownExamples = exOpen ? exampleList : exampleList.slice(0, 1)
                     const shown = isOpen ? flagList : flagList.slice(0, 4)
                     return (<Card key={c.id} className="command-card" style={{animationDelay:`${Math.min(i*25,300)}ms`}}><div className="command-card-main">
                       <div className="command-head"><span className="command-name">sf {c.id.replaceAll(':',' ')}</span><button className={`copy-command ${copied===c.id?'copied':''}`} onClick={() => {void copy(c.command, c.id);selectCommand(c.command)}}>{copied===c.id?<><Check size={14}/> Copied</>:<><Copy size={14}/> Copy</>}</button><Badge variant="outline" className={`category-badge cat-${c.category}`}>{categoryMeta(c.category)?.label || c.category}</Badge><button className={`favorite-button ${favorite?'is-favorite':''}`} onClick={() => toggleFavorite(c.id)} aria-label={favorite?'Remove favorite':'Add favorite'} title={favorite?'Remove favorite':'Add to favorites'}><Star size={17} fill={favorite?'currentColor':'none'}/></button></div>
                       <p className="command-summary">{c.summary}</p>
-                      <p className="command-description">{c.description.slice(0,260)}{c.description.length>260?'…':''}</p>
+                      <p className={`command-description ${descOpen ? '' : 'clamped'}`}>{c.description}</p>
+                      {c.description.length > 120 && <button className="desc-toggle" onClick={() => toggleDesc(c.id)} aria-expanded={descOpen}>{descOpen ? 'Show less' : 'Show full description'}</button>}
                       {(flagList.length > 0 || argList.length > 0) && <div className={`command-flags ${isOpen ? 'flags-open' : ''}`}>
                         {argList.slice(0, isOpen ? argList.length : 2).map(a => <span key={String(a[0])} className="flag-chip arg-chip" title={String(a[1] || '')}>&lt;{a[0]}&gt;{a[2] ? '*' : ''}</span>)}
                         {shown.map(f => isOpen
