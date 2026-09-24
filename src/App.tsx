@@ -3,7 +3,7 @@ import Fuse from 'fuse.js'
 import {
   Activity, ArrowDown, ArrowRight, ArrowUpRight, Check, ChevronDown,
   ChevronRight, ChevronsUpDown, CircleHelp, Copy, ExternalLink,
-  Filter, Keyboard, Menu, Moon, Search, ShieldCheck,
+  Filter, Keyboard, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, ShieldCheck,
   Star, Sun, Terminal, X, Zap,
 } from 'lucide-react'
 import rawCommands from './data/commands.json'
@@ -64,6 +64,7 @@ function App() {
   const [dark, setDark] = useState(() => readLocal('sfcli:dark', false))
   const [sort, setSort] = useState<'relevance' | 'name'>('relevance')
   const [openSections, setOpenSections] = useState({ workspace: true, categories: true })
+  const [sidebarOpen, setSidebarOpen] = useState(() => readLocal('sfcli:sidebar', true))
   const [expanded, setExpanded] = useState<string[]>([])
   const [openExamples, setOpenExamples] = useState<string[]>([])
   const [openDesc, setOpenDesc] = useState<string[]>([])
@@ -73,6 +74,7 @@ function App() {
   useEffect(() => { localStorage.setItem('sfcli:favorites', JSON.stringify(favorites)) }, [favorites])
   useEffect(() => { localStorage.setItem('sfcli:dark', JSON.stringify(dark)); document.documentElement.dataset.theme = dark ? 'dark' : 'light' }, [dark])
   useEffect(() => { localStorage.setItem('sfcli:searches', JSON.stringify(recentSearches)) }, [recentSearches])
+  useEffect(() => { localStorage.setItem('sfcli:sidebar', JSON.stringify(sidebarOpen)) }, [sidebarOpen])
 
   const results = useMemo(() => {
     let found: CommandItem[] = deferredQuery.trim() ? rankByIntent(deferredQuery.trim()) : category === 'all' && view === 'commands' ? popular : allCommands
@@ -101,6 +103,7 @@ function App() {
       <header className="topbar">
         <div className="topbar-left">
           <Button variant="ghost" size="icon" className="mobile-menu" onClick={() => setMobileNav(!mobileNav)} aria-label="Open navigation"><Menu size={19}/></Button>
+          <Button variant="ghost" size="icon" className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} aria-expanded={sidebarOpen} title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>{sidebarOpen ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}</Button>
           <a className="brand" href="#" onClick={e => {e.preventDefault(); setSection('commands')}}><span className="brand-mark"><Terminal size={17}/></span><span>sf<span className="brand-light">cli</span><span className="brand-dot">.</span></span></a>
           <span className="topbar-divider"/><span className="brand-caption">Salesforce CLI command center</span>
         </div>
@@ -111,7 +114,7 @@ function App() {
         </div>
       </header>
 
-      <div className="workspace">
+      <div className={`workspace ${sidebarOpen ? "" : "sidebar-collapsed"}`}>
         <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
           <button className={`sidebar-head ${openSections.workspace ? '' : 'collapsed'}`} onClick={() => toggleSection('workspace')} aria-expanded={openSections.workspace}><span>WORKSPACE</span><ChevronDown size={14}/></button>
           {openSections.workspace && <div className="nav-list">

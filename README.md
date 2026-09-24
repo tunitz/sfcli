@@ -12,7 +12,8 @@ A fast, static command reference for Salesforce CLI (`sf`). Search all commands 
   (up to 2,500 characters), flags and examples expand the same way.
 - Favorites, recent searches and theme preference stored in this browser only.
 - Curated workflows for authenticating, checking an org, creating a project, deploying metadata, querying records, and opening an org.
-- Collapsible sidebar sections and clickable breadcrumbs for moving between views.
+- Collapsible sidebar (whole panel plus workspace/CATEGORIES sections) and clickable breadcrumbs for
+  moving between views; the sidebar state persists in this browser.
 - Static Vite build; no API or runtime server required.
 
 ## Run locally
