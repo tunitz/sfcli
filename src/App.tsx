@@ -59,7 +59,12 @@ function App() {
   const [view, setView] = useState<'commands' | 'favorites' | 'workflows'>('commands')
   const [copied, setCopied] = useState('')
   const [mobileNav, setMobileNav] = useState(false)
-  const [dark, setDark] = useState(() => readLocal('sfcli:dark', false))
+  const [dark, setDark] = useState(() => {
+    try { const v = localStorage.getItem('sfcli:dark'); return v ? JSON.parse(v) as boolean : window.matchMedia('(prefers-color-scheme: dark)').matches }
+    catch { return window.matchMedia('(prefers-color-scheme: dark)').matches }
+  })
+  const [hasDarkOverride, setHasDarkOverride] = useState(() => { try { return localStorage.getItem('sfcli:dark') !== null } catch { return false } })
+  const [activeNav, setActiveNav] = useState<{ key: string; index: number }>({ key: '', index: -1 })
   const [sort, setSort] = useState<'relevance' | 'name'>('relevance')
   const [openSections, setOpenSections] = useState({ workspace: true, categories: true })
   const [sidebarOpen, setSidebarOpen] = useState(() => readLocal('sfcli:sidebar', true))
@@ -75,6 +80,7 @@ function App() {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const helpTriggerRef = useRef<HTMLButtonElement>(null)
   const mobileMenuRef = useRef<HTMLButtonElement>(null)
+  const resultListRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 760px)')
@@ -89,7 +95,18 @@ function App() {
   }, [showHelp])
 
   useEffect(() => { localStorage.setItem('sfcli:favorites', JSON.stringify(favorites)) }, [favorites])
-  useEffect(() => { localStorage.setItem('sfcli:dark', JSON.stringify(dark)); document.documentElement.dataset.theme = dark ? 'dark' : 'light' }, [dark])
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    const schemeMeta = document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]')
+    if (schemeMeta) schemeMeta.content = hasDarkOverride ? (dark ? 'dark' : 'light') : 'light dark'
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#14191f' : '#f8f9fb')
+  }, [dark, hasDarkOverride])
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = (e: MediaQueryListEvent) => { if (!hasDarkOverride) setDark(e.matches) }
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [hasDarkOverride])
   useEffect(() => { localStorage.setItem('sfcli:searches', JSON.stringify(recentSearches)) }, [recentSearches])
   useEffect(() => { localStorage.setItem('sfcli:sidebar', JSON.stringify(sidebarOpen)) }, [sidebarOpen])
   useEffect(() => {
@@ -115,6 +132,34 @@ function App() {
     return found
   }, [deferredQuery, category, view, favorites, sort])
 
+  const resultKey = JSON.stringify([deferredQuery, category, view, sort, favorites, page])
+  const activeIndex = activeNav.key === resultKey ? activeNav.index : -1
+
+  useEffect(() => {
+    const count = Math.min(visibleCount, results.length)
+    if (activeIndex < 0 || activeIndex >= count) return
+    resultListRef.current?.querySelectorAll('.command-card')[activeIndex]?.scrollIntoView({ block: 'nearest' })
+  }, [activeIndex, results, visibleCount])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (view === 'workflows' || showHelp) return
+      const count = Math.min(visibleCount, results.length)
+      if (!count) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'BUTTON' || tag === 'A' || tag === 'SELECT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      if (e.key === 'ArrowDown') { e.preventDefault(); setActiveNav({ key: resultKey, index: activeIndex < 0 ? 0 : Math.min(activeIndex + 1, count - 1) }) }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveNav({ key: resultKey, index: activeIndex < 0 ? count - 1 : Math.max(activeIndex - 1, 0) }) }
+      else if (e.key === 'Enter' && activeIndex >= 0 && activeIndex < count) {
+        const c = results[activeIndex]
+        if (c) { e.preventDefault(); void copy(c.command, c.id) }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [view, showHelp, results, visibleCount, activeIndex, resultKey])
+
   function toggleFavorite(id: string) { setFavorites(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   function toggleExpanded(id: string) { setExpanded(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
   function toggleExamples(id: string) { setOpenExamples(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
@@ -123,6 +168,16 @@ function App() {
     if (!el) return
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     el.focus({ preventScroll: true })
+  }
+  function toggleTheme() {
+    const next = !dark
+    const isOverride = next !== window.matchMedia('(prefers-color-scheme: dark)').matches
+    try {
+      if (isOverride) localStorage.setItem('sfcli:dark', JSON.stringify(next))
+      else localStorage.removeItem('sfcli:dark')
+    } catch {}
+    setHasDarkOverride(isOverride)
+    setDark(next)
   }
   function toggleSection(name: 'workspace' | 'categories') { setOpenSections(v => ({ ...v, [name]: !v[name] })) }
   function toggleDesc(id: string) { setOpenDesc(v => v.includes(id) ? v.filter(x => x !== id) : [...v, id]) }
@@ -136,6 +191,7 @@ function App() {
 
   return <TooltipProvider delayDuration={250}>
     <div className={`app-shell ${dark ? 'dark-mode' : ''}`}>
+      <a href="#command-list" className="skip-link visually-hidden">Skip to content</a>
       <header className="topbar">
         <div className="topbar-left">
           <Button ref={mobileMenuRef} variant="ghost" size="icon" className="mobile-menu" onClick={() => setMobileNav(!mobileNav)} aria-label={mobileNav ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileNav} aria-controls="sidebar"><Menu size={19}/></Button>
@@ -145,7 +201,7 @@ function App() {
         </div>
         <div className="topbar-right">
           <span className="version-pill"><span className="live-dot"/> CLI reference</span>
-          <Button variant="ghost" size="icon" className="top-icon" aria-label="Toggle theme" onClick={() => setDark(!dark)}>{dark ? <Sun size={17}/> : <Moon size={17}/>}</Button>
+          <Button variant="ghost" size="icon" className="top-icon" aria-label="Toggle theme" onClick={toggleTheme}>{dark ? <Sun size={17}/> : <Moon size={17}/>}</Button>
           <a className="github-link" href="https://github.com/salesforcecli/cli" target="_blank" rel="noreferrer"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.55.1.76-.24.76-.54v-2.1c-3.1.68-3.76-1.31-3.76-1.31-.5-1.28-1.23-1.62-1.23-1.62-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15.99 1.7 2.6 1.21 3.23.93.1-.72.39-1.21.7-1.49-2.48-.28-5.09-1.24-5.09-5.51 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.06 1.15a10.6 10.6 0 0 1 5.57 0c2.13-1.45 3.06-1.15 3.06-1.15.61 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.28-2.61 5.22-5.1 5.5.4.35.75 1.02.75 2.06v3.07c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/></svg><span>GitHub</span><ArrowUpRight size={12}/></a>
         </div>
       </header>
@@ -176,7 +232,7 @@ function App() {
             </nav>
             {view === 'commands' && category === 'all' && !deferredQuery && <section className="hero-section"><div className="hero-copy"><div className="eyebrow"><span className="eyebrow-mark"><Activity size={12}/></span> YOUR SALESFORCE CLI COMPANION</div><h1>Every command.<br/><span>One search away.</span></h1><p>Explore, understand, and copy Salesforce CLI commands. Search by name, flag, or just describe what you’re trying to do.</p><div className="hero-actions"><Button className="hero-button" onClick={focusSearch}><Search size={16}/> Explore commands <ArrowDown size={14}/></Button><button className="hero-secondary" onClick={() => setSection('workflows')}>Browse common workflows <ArrowRight size={14}/></button></div></div><div className="hero-art" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="hero-terminal"><div className="terminal-top"><span className="terminal-lights"><i/><i/><i/></span><span>~/my-salesforce-project</span><span className="terminal-ready"><span/>ready</span></div><div className="terminal-body"><div><span className="terminal-prompt">$</span> sf org login web <span className="terminal-cursor"/></div><div className="terminal-muted">Opening browser for authentication…</div><div className="terminal-success"><Check size={12}/> Successfully authorized <span>my-org</span></div><div className="terminal-line"><span className="terminal-prompt">$</span> sf project deploy start <span className="terminal-cursor faint"/></div></div></div><div className="float-chip chip-top"><span className="chip-icon">✦</span> {allCommands.length} commands</div><div className="float-chip chip-bottom"><span className="chip-check"><Check size={12}/></span> Copied to clipboard</div><div className="hero-sparkle sparkle-one">✳</div><div className="hero-sparkle sparkle-two">✦</div></div></section>}
 
-            <section className="command-browser" id="command-list">
+            <section className="command-browser" id="command-list" tabIndex={-1}>
               <div className="section-heading"><div><div className="heading-title-row"><h2>{title}</h2>{deferredQuery && view !== 'workflows' && <Badge variant="secondary" className="heading-badge">FUZZY SEARCH</Badge>}</div><p>{subtitle}</p></div><a className="docs-link" href="https://developer.salesforce.com/docs/platform/salesforce-cli" target="_blank" rel="noreferrer">CLI documentation <ExternalLink size={13}/></a></div>
               {view !== 'workflows' && <div className="search-row"><div className="search-wrap"><Search size={17} className="search-icon"/><Input id="command-search" aria-label="Search commands" value={query} onChange={e => setSearch(e.target.value)} onKeyDown={e => {if (e.key === 'Escape') setQuery('')}} placeholder="Try ‘log in to a sandbox’ or ‘deploy my changes’…" className="search-input"/><span className="search-kbd"><kbd>⌘</kbd><kbd>K</kbd></span>{query && <button className="clear-search" onClick={() => setQuery('')} aria-label="Clear search"><X size={15}/></button>}</div><Tooltip><TooltipTrigger asChild><Button variant="outline" size="icon" className={`filter-button ${sort === 'name' ? 'filter-active' : ''}`} aria-label={`Sort by ${sort === 'name' ? 'relevance' : 'name'}`} onClick={() => setSort(sort === 'name' ? 'relevance' : 'name')}><ChevronsUpDown size={16}/></Button></TooltipTrigger><TooltipContent>Sort by {sort === 'name' ? 'relevance' : 'name'}</TooltipContent></Tooltip></div>}
               <div className="sr-only" role="status" aria-live="polite">{copied && copied !== 'copy-error' ? 'Copied to clipboard.' : ''}</div>
@@ -185,8 +241,8 @@ function App() {
 
               {view === 'workflows' ? <div className="workflow-grid">{workflows.map(w => <Card key={w.step} className="workflow-card"><div className="workflow-step">{w.step}<span/></div><h3>{w.title}</h3><p>{w.description}</p>{w.commands.map((cmd,i) => <button className="workflow-command" key={i} onClick={() => {void copy(cmd,`workflow-${w.step}-${i}`)}}><code>{cmd}</code>{copied===`workflow-${w.step}-${i}`?<Check size={15}/>:<Copy size={15}/>}</button>)}<div className="workflow-tags">{w.tags.slice(0,3).map(t=><span key={t}>{t}</span>)}</div></Card>)}</div> : <>
                 {view === 'favorites' && !favorites.length ? <div className="empty-state"><span className="empty-icon"><Star size={23}/></span><h3>Save commands for later</h3><p>Tap the star on any command and it’ll be waiting here next time.</p><Button variant="outline" onClick={() => setSection('commands')}>Browse commands <ArrowRight size={14}/></Button></div> : <>
-                  <div className="result-meta"><span role="status" aria-live="polite">Showing <strong>{Math.min(visibleCount, results.length)}</strong> of <strong>{results.length}</strong> {deferredQuery ? 'matches' : 'commands'}</span><button onClick={() => setSort(sort === 'relevance' ? 'name' : 'relevance')} className="sort-control"><ChevronsUpDown size={13}/>{sort === 'relevance' ? 'Best match' : 'Name'}</button></div>
-                  <div className="command-list">{results.slice(0, visibleCount).map((c, i) => {
+                  <div className="result-meta"><span role="status" aria-live="polite">Showing <strong>{Math.min(visibleCount, results.length)}</strong> of <strong>{results.length}</strong> {deferredQuery ? 'matches' : 'commands'}</span></div>
+                  <div className="command-list" ref={resultListRef}>{results.slice(0, visibleCount).map((c, i) => {
                     const favorite = favorites.includes(c.id)
                     const flagList = c.flags || []
                     const argList = c.args || []
@@ -196,7 +252,7 @@ function App() {
                     const descOpen = openDesc.includes(c.id)
                     const shownExamples = exOpen ? exampleList : exampleList.slice(0, 1)
                     const shown = isOpen ? flagList : flagList.slice(0, 4)
-                    return (<Card key={c.id} className="command-card" style={{animationDelay:`${Math.min(i*25,300)}ms`}}><div className="command-card-main">
+                    return (<Card key={c.id} className={`command-card ${i === activeIndex ? 'is-active' : ''}`} aria-current={i === activeIndex ? 'true' : undefined} style={{animationDelay:`${Math.min(i*25,300)}ms`}}><div className="command-card-main">
                       <div className="command-head"><span className="command-name">sf {c.id.replaceAll(':',' ')}</span><button className={`copy-command ${copied===c.id?'copied':''}`} onClick={() => {void copy(c.command, c.id)}}>{copied===c.id?<><Check size={14}/> Copied</>:<><Copy size={14}/> Copy</>}</button><Badge variant="outline" className={`category-badge cat-${c.category}`}>{categoryMeta(c.category)?.label || c.category}</Badge><button className={`favorite-button ${favorite?'is-favorite':''}`} onClick={() => toggleFavorite(c.id)} aria-label={favorite?'Remove favorite':'Add favorite'} title={favorite?'Remove favorite':'Add to favorites'}><Star size={17} fill={favorite?'currentColor':'none'}/></button></div>
                       <p className="command-summary">{c.summary}</p>
                       <p className={`command-description ${descOpen ? '' : 'clamped'}`}>{c.description}</p>
@@ -230,7 +286,7 @@ function App() {
         </main>
       </div>
 
-      <dialog ref={dialogRef} className="help-modal help-dialog" aria-labelledby="help-title" onClose={() => {setShowHelp(false); helpTriggerRef.current?.focus()}}><button className="modal-close" onClick={() => setShowHelp(false)} aria-label="Close help"><X size={17}/></button><div className="help-icon"><Keyboard size={20}/></div><h2 id="help-title">Search shortcuts</h2><p>Find commands the way you think about them.</p><div className="shortcut-row"><span>Search by command or intent</span><kbd>Type anything</kbd></div><div className="shortcut-row"><span>Clear search</span><kbd>ESC</kbd></div><div className="shortcut-row"><span>Copy a command</span><kbd>Click copy</kbd></div><Button className="help-done" onClick={() => setShowHelp(false)}>Got it</Button></dialog>
+      <dialog ref={dialogRef} className="help-modal help-dialog" aria-labelledby="help-title" onClose={() => {setShowHelp(false); helpTriggerRef.current?.focus()}}><button className="modal-close" onClick={() => setShowHelp(false)} aria-label="Close help"><X size={17}/></button><div className="help-icon"><Keyboard size={20}/></div><h2 id="help-title">Search shortcuts</h2><p>Find commands the way you think about them.</p><div className="shortcut-row"><span>Search by command or intent</span><kbd>Type anything</kbd></div><div className="shortcut-row"><span>Clear search</span><kbd>ESC</kbd></div><div className="shortcut-row"><span>Copy a command</span><kbd>Click copy</kbd></div><div className="shortcut-row"><span>Jump to search</span><kbd>⌘K / Ctrl K</kbd></div><div className="shortcut-row"><span>Move between results</span><kbd>↑ / ↓</kbd></div><div className="shortcut-row"><span>Copy highlighted command</span><kbd>Enter</kbd></div><Button className="help-done" onClick={() => setShowHelp(false)}>Got it</Button></dialog>
       <button className="mobile-backdrop" aria-label="Close menu" onClick={() => {setMobileNav(false); mobileMenuRef.current?.focus()}} style={{display:mobileNav?'block':'none'}}/>
     </div>
   </TooltipProvider>

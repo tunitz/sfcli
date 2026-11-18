@@ -16,6 +16,9 @@ A fast, static command reference for Salesforce CLI (`sf`). Search all commands 
 - Curated workflows for authenticating, checking an org, creating a project, deploying metadata, querying records, and opening an org.
 - Collapsible sidebar (whole panel plus workspace/CATEGORIES sections) and clickable breadcrumbs for
   moving between views; the sidebar state persists in this browser.
+- Keyboard-first browsing: ⌘K/Ctrl+K focuses search, ↑/↓ highlights a result and Enter copies its
+  command. A skip link and visible focus rings support keyboard navigation.
+- The theme follows your system preference until you override it; the override is stored in this browser.
 - Static Vite build; no API or runtime server required.
 
 ## Run locally
